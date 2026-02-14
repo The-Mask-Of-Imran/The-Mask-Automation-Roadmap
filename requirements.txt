@@ -1,7 +1,8 @@
 fastapi
 uvicorn
+pydantic
+requests
 langchain
 langchain-community
 langchain-ollama
-pydantic
-requests
+python-dotenv
