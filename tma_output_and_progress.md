@@ -1,0 +1,59 @@
+# টাস্ক ডকুমেন্টেশন: [টাস্ক নম্বর] - [টাস্ক নাম]
+
+## 1. বেসিক ইনফো
+- **টাস্ক নম্বর**: [e.g., 1]
+- **টাস্ক নাম**: [e.g., Long-Term Memory Fix]
+- **কমপ্লিশন তারিখ**: [e.g., YYYY-MM-DD]
+- **ভার্সন**: [e.g., v0.1]
+- **রিলেটেড ফেজ**: [e.g., ফেজ ১]
+- **প্রিভিয়াস ডিপেন্ডেন্সি**: [e.g., কোনো টাস্ক নেই, অথবা টাস্ক ০ যদি থাকে]
+- **পরবর্তী সম্ভাব্য টাস্ক**: [e.g., টাস্ক ২ - হাইব্রিড সুইচিং]
+
+## 2. কাজের বিবরণ
+- **কী কাজ করা হলো**: [বিস্তারিত বর্ণনা, e.g., লং-টার্ম মেমরি সিস্টেমের Connection refused এরর ফিক্স করা হয়েছে। এখন মেমরি স্টোর, রিট্রিভ এবং ব্যাকআপ কাজ করে।]
+- **কেন করা হলো**: [উদ্দেশ্য, e.g., মেমরি স্থিতিশীল না হলে সেলফ-আপগ্রেড সম্ভব না, এবং লং-টার্ম টাস্ক মনে রাখা যাবে না।]
+- **প্রভাব**: [সিস্টেমে কী চেঞ্জ, e.g., এখন সিস্টেম বছরের পর বছর ডাটা সেভ করতে পারে, এবং অন্য ফিচারস (e.g., সেলফ-লার্নিং) এর উপর ডিপেন্ড করে।]
+
+## 3. ইমপ্লিমেন্টেশন ডিটেইলস
+- **কীভাবে টাস্ক কমপ্লিট করা হলো**: [স্টেপ-বাই-স্টেপ, e.g.,
+  1. এরর ডায়াগনোজ: পোর্ট কনফ্লিক্ট চেক।
+  2. ক্লাস আপডেট: TaskMemoryManager-এ init মেথড যোগ।
+  3. টেস্ট: স্যাম্পল ডাটা সেভ/লোড।
+  4. ডেপ্লয়: Git push এবং Render রিস্টার্ট।]
+- **সময়কাল**: [e.g., ২ দিন]
+- **চ্যালেঞ্জস এবং সল্যুশন**: [e.g., Concurrency issue: WAL মোড চালু করা।]
+
+## 4. ব্যবহৃত ফিচারস, লজিক এবং লাইব্রেরীস
+- **ব্যবহৃত ফিচারস**: [লিস্ট, e.g., SQLite ডাটাবেস, JSON ব্যাকআপ, এরর রিট্রাই মেকানিজম।]
+- **ব্যবহৃত লজিক**: [বিস্তারিত, e.g.,
+  - রিট্রাই লজিক: Exponential backoff (tenacity লাইব্রেরী দিয়ে)।
+  - ডাটা স্টোরেজ লজিক: JSON string-এ কনভার্ট করে SQLite-এ সেভ, ক্যাটাগরি-ভিত্তিক কোয়েরি।]
+- **ব্যবহৃত লাইব্রেরীস/টুলস**: [লিস্ট সহ ভার্সন যদি থাকে, e.g.,
+  - sqlite3 (built-in): ডাটাবেস কানেকশন।
+  - json (built-in): ব্যাকআপ।
+  - tenacity: রিট্রাই লুপ।
+  - logging: এরর লগিং।]
+
+## 5. কোড ডিটেইলস
+- **প্রভাবিত ফাইলস**: [লিস্ট, e.g.,
+  - TaskMemoryManager.py (প্রধান ফাইল)।
+  - config.json (DB পাথ যোগ)।
+  - tests/memory_test.py (টেস্ট স্ক্রিপ্ট)।]
+- **কোড স্নিপেটস এবং ব্যাখ্যা**: [প্রত্যেক স্নিপেটের সাথে ব্যাখ্যা, যাতে নতুন AI বুঝতে পারে।
+  ```python
+  # TaskMemoryManager.py - init মেথড (লজিক: কানেকশন তৈরি এবং এরর হ্যান্ডলিং)
+  def __init__(self, db_path='memory.db'):
+      try:
+          self.conn = sqlite3.connect(db_path, check_same_thread=False)  # WAL মোড চালু concurrency-র জন্য
+          self.cursor = self.conn.cursor()
+          self.cursor.execute('''CREATE TABLE IF NOT EXISTS memories (id INTEGER PRIMARY KEY, task_id TEXT, content TEXT, timestamp DATETIME, category TEXT)''')
+          self.conn.commit()
+      except sqlite3.OperationalError as e:
+          logging.error(f"DB Error: {e}")
+          # রিট্রাই লজিক: tenacity দিয়ে ৩ বার ট্রাই
+          @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
+          def retry_connect():
+              self.conn = sqlite3.connect(db_path)
+          retry_connect()
+  
+  # ব্যাখ্যা: এই মেথড DB কানেকশন তৈরি করে। মূল অংশ: WAL মোড (check_same_thread=False) concurrency ফিক্স করে। এরর হলে রিট্রাই করে। এটি সেলফ-লার্নিং-এর জন্য ডাটা সেভ করে, যাতে পরবর্তী টাস্কে save_memory() কল করে সিঙ্ক করা যায়।
